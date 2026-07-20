@@ -281,21 +281,3 @@ classification, session construction, leases, retry state, telemetry, and a
   multi-tenant deployment.
 - You are responsible for ensuring that requested downloads comply with content
   rights, platform terms, and applicable law.
-
-## Troubleshooting
-
-| Symptom | What it means | What to do |
-| --- | --- | --- |
-| `proxy_capacity` / tunnel `503` | Massive could not currently allocate a suitable tunnel. | Let the worker back off and retry with a new session; inspect attempt exit metadata. |
-| `video_unavailable`, `video_private`, `not_found` | Terminal YouTube/content outcome. | Do not retry automatically. |
-| `bot_wall` or `429` | YouTube rejected the current extraction path or guest request. | Confirm Deno is installed, use the configured player-client pair, then inspect per-attempt telemetry. |
-| Stale `running` job | A worker stopped before finishing. | Restart the worker; expired leases are requeued automatically. |
-
-## Roadmap
-
-- Stable public response names (`job_id`, `format`) and a compact `202` body
-- Exact-360p mux policy with ffmpeg
-- Webhook-delivery retry/dead-letter tracking
-- Docker Compose and CI
-- Postgres + distributed queue adapters for multi-worker deployments
-- Batch/playlist API support
