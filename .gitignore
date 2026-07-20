@@ -1,0 +1,30 @@
+# Python and tooling
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+build/
+dist/
+
+# Runtime state and downloaded media
+*.db
+artifacts/
+load-test-artifacts/
+downloads/
+*.mp4
+*.mkv
+*.webm
+*.part
+
+# Secrets and local settings
+.env
+.env.local
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+
+# Internal docs (not for public repo)
+docs/
