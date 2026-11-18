@@ -31,10 +31,13 @@ and proxy errors that are invisible after the job fails.
 
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/)
-- [Deno](https://deno.com/) for reliable modern YouTube player extraction
+- [Deno](https://deno.com/) for reliable modern YouTube player extraction (the
+  `youtube` extra installs `yt-dlp[default]`, which includes the `yt-dlp-ejs`
+  challenge solver Deno runs)
 - `ffmpeg` only for the future muxed-format profile; it is not required for
   progressive downloads
-- A Massive Residential account and credentials
+- Optional: a Massive Residential account. Without `PROXY_USER`/`PROXY_PASS`,
+  the worker downloads over a direct connection (fine for low volume).
 
 ## The operating model
 
@@ -129,7 +132,8 @@ VIDEO_JOBS_STARTS_PER_SECOND=0
 # Modern YouTube extraction.
 YTDLP_JS_RUNTIME=deno
 YTDLP_SOCKET_TIMEOUT=45
-YTDLP_YOUTUBE_PLAYER_CLIENTS=android_vr,web_embedded
+# Optional; unset uses yt-dlp's default YouTube clients.
+# YTDLP_YOUTUBE_PLAYER_CLIENTS=
 ```
 
 ### Massive routing details
