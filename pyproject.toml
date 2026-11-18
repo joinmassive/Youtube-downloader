@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-youtube = ["yt-dlp>=2024.1.0"]
+youtube = ["yt-dlp[default]>=2026.10.26"]
 s3 = ["boto3>=1.34"]
 dev = ["pytest>=8.0", "httpx>=0.27"]
 

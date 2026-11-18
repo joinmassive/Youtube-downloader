@@ -14,7 +14,9 @@ from urllib.parse import quote, unquote, urlsplit
 
 from .errors import DownloadError, redact
 
-DEFAULT_PLAYER_CLIENTS = "android_vr,web_embedded"
+# Empty lets yt-dlp choose its own YouTube clients. Forcing android_vr now needs a
+# GVS PO token, without which its formats fail with HTTP 403.
+DEFAULT_PLAYER_CLIENTS = ""
 
 
 @dataclass(frozen=True)

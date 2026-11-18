@@ -104,8 +104,14 @@ def test_downloader_uses_yt_dlp_python_api(monkeypatch, tmp_path) -> None:
                     "requested_downloads": [{"filepath": str(path)}]}
 
     monkeypatch.setattr(yt_dlp, "YoutubeDL", FakeYoutubeDL)
+    monkeypatch.delenv("YTDLP_YOUTUBE_PLAYER_CLIENTS", raising=False)
     result = YtDlpDownloader().download("https://www.youtube.com/watch?v=abc", "best_progressive", tmp_path,
                                         "http://user:secret@proxy.example:65534")
     assert result.path.name == "abc.mp4"
     assert observed["proxy"] == "http://user:secret@proxy.example:65534"
-    assert observed["extractor_args"]["youtube"]["player_client"] == ["android_vr", "web_embedded"]
+    # By default yt-dlp picks its own player clients.
+    assert observed["extractor_args"] == {}
+
+    monkeypatch.setenv("YTDLP_YOUTUBE_PLAYER_CLIENTS", "tv,web_safari")
+    YtDlpDownloader().download("https://www.youtube.com/watch?v=abc", "best_progressive", tmp_path, None)
+    assert observed["extractor_args"]["youtube"]["player_client"] == ["tv", "web_safari"]
