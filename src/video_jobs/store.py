@@ -14,7 +14,8 @@ class SqliteJobStore:
     """Small local store; replace this boundary with Postgres/queue infrastructure."""
 
     def __init__(self, database: str) -> None:
-        Path(database).parent.mkdir(parents=True, exist_ok=True) if database != ":memory:" else None
+        if database != ":memory:":
+            Path(database).parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(database, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
         self.lock = threading.RLock()

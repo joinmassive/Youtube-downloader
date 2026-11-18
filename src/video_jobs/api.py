@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import os
+
 from fastapi import FastAPI, Header, HTTPException, Response
 
 from .config import load_dotenv
-from .models import Job, SubmitJob
+from .models import Job, JobStatus, SubmitJob
 from .store import SqliteJobStore
 
 load_dotenv()
@@ -17,7 +18,7 @@ def submit(request: SubmitJob, response: Response, idempotency_key: str | None =
     if request.url.host not in {"youtube.com", "www.youtube.com", "youtu.be", "m.youtube.com"}:
         raise HTTPException(422, "Only configured downloader providers are accepted in this deployment")
     job = store.create(request, idempotency_key)
-    response.status_code = 200 if job.status != "queued" else 202
+    response.status_code = 200 if job.status != JobStatus.QUEUED else 202
     return job
 
 

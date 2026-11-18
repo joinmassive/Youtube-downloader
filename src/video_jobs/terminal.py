@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import threading
+
 from .errors import redact
 
 _lock = threading.Lock()
@@ -20,6 +21,10 @@ def line(message: str) -> None:
         print(message, flush=True)
 
 
+def _short(job_id: str) -> str:
+    return job_id.split("-")[0]
+
+
 def banner(concurrency: int, proxy_enabled: bool) -> None:
     route = "Massive strict sessions" if proxy_enabled else "direct connection"
     line(f"{RED}{BOLD}"
@@ -32,27 +37,33 @@ def banner(concurrency: int, proxy_enabled: bool) -> None:
 
 
 def job_started(job_id: str, attempt: int, profile: str, delivery: str) -> None:
-    short = job_id.split("-")[0]
-    line(f"\n{MAGENTA}{BOLD}┌─ job {short}  •  attempt {attempt}{RESET}")
+    line(f"\n{MAGENTA}{BOLD}┌─ job {_short(job_id)}  •  attempt {attempt}{RESET}")
     line(f"{MAGENTA}├─ profile  {RESET}{profile}")
     line(f"{MAGENTA}├─ route    {RESET}starting downloader")
     line(f"{MAGENTA}└─ delivery {RESET}{delivery}")
 
 
 def downloader_output(job_id: str, message: str) -> None:
-    short = job_id.split("-")[0]
     cleaned = message.strip()
     if cleaned:
-        line(f"{CYAN}  │ [{short}] yt-dlp {RESET}{cleaned}")
+        line(f"{CYAN}  │ [{_short(job_id)}] yt-dlp {RESET}{cleaned}")
 
 
 def completed(job_id: str, key: str) -> None:
-    line(f"{GREEN}{BOLD}  ✓ [{job_id.split('-')[0]}] completed{RESET} {key}")
+    line(f"{GREEN}{BOLD}  ✓ [{_short(job_id)}] completed{RESET} {key}")
 
 
 def retrying(job_id: str, attempt: int, message: str) -> None:
-    line(f"{YELLOW}{BOLD}  ↻ [{job_id.split('-')[0]}] retrying{RESET} after attempt {attempt}: {redact(message)}")
+    line(f"{YELLOW}{BOLD}  ↻ [{_short(job_id)}] retrying{RESET} after attempt {attempt}: {redact(message)}")
 
 
 def failed(job_id: str, message: str) -> None:
-    line(f"{RED}{BOLD}  ✗ [{job_id.split('-')[0]}] failed{RESET} {redact(message)}")
+    line(f"{RED}{BOLD}  ✗ [{_short(job_id)}] failed{RESET} {redact(message)}")
+
+
+def recovered(count: int) -> None:
+    line(f"{YELLOW}  [recovered]{RESET} requeued {count} expired worker lease(s)")
+
+
+def webhook_failed(job_id: str, message: str) -> None:
+    line(f"{YELLOW}  ! [{_short(job_id)}] webhook delivery failed{RESET} {redact(message)}")

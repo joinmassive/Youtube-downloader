@@ -53,3 +53,32 @@ def test_one_hundred_jobs_are_bounded_to_thirty_claims() -> None:
     assert all(job is not None and job.status == JobStatus.RUNNING for job in claimed)
     assert sum(store.get(job.id).status == JobStatus.RUNNING for job in jobs) == 30
     assert sum(store.get(job.id).status == JobStatus.QUEUED for job in jobs) == 70
+
+
+def test_webhook_failure_does_not_undo_completed_job(monkeypatch, tmp_path) -> None:
+    from video_jobs import worker
+    from video_jobs.providers import DownloadedFile
+
+    store = SqliteJobStore(":memory:")
+    monkeypatch.setattr(worker, "store", store)
+    monkeypatch.setenv("VIDEO_JOBS_LOCAL_STORAGE", str(tmp_path / "artifacts"))
+    for name in ("PROXY_USER", "PROXY_PASS", "MASSIVE_PROXY_USERNAME", "MASSIVE_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+
+    def fake_download(self, url, profile, target_dir, proxy, on_output=None):
+        path = target_dir / "abc123.mp4"
+        path.write_bytes(b"video")
+        return DownloadedFile(path=path, video_id="abc123")
+
+    def broken_webhook(job):
+        raise TimeoutError("webhook timed out")
+
+    monkeypatch.setattr(worker.YtDlpDownloader, "download", fake_download)
+    monkeypatch.setattr(worker, "deliver_webhook", broken_webhook)
+
+    store.create(SubmitJob.model_validate({**payload(), "webhook_url": "https://example.com/hook"}))
+    job = store.claim()
+    worker.process(job)
+
+    assert store.get(job.id).status == JobStatus.COMPLETED
+    assert store.attempts_for(job.id)[0]["phase"] == "completed"

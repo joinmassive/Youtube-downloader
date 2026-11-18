@@ -4,21 +4,22 @@ import hashlib
 import hmac
 import json
 import os
+import random
 import shutil
 import tempfile
-import time
 import threading
-import random
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from urllib.request import Request, urlopen
 
+from . import terminal
 from .api import store
 from .config import load_dotenv
-from .models import Job, JobStatus
-from .providers import LocalStorage, S3Storage, YtDlpDownloader, massive_from_environment
-from . import terminal
 from .errors import classify
+from .models import Job, JobStatus
+from .providers import (DEFAULT_PLAYER_CLIENTS, LocalStorage, S3Storage, YtDlpDownloader,
+                        massive_from_environment)
 
 
 class StartPacer:
@@ -62,6 +63,14 @@ def deliver_webhook(job: Job) -> None:
         pass
 
 
+def notify(job: Job) -> None:
+    """Send the webhook without letting a delivery failure change the job's outcome."""
+    try:
+        deliver_webhook(job)
+    except Exception as exc:
+        terminal.webhook_failed(job.id, str(exc))
+
+
 def process(job: Job) -> None:
     if start_pacer:
         start_pacer.wait()
@@ -69,7 +78,7 @@ def process(job: Job) -> None:
                if job.request.delivery.type == "s3"
                else LocalStorage(os.getenv("VIDEO_JOBS_LOCAL_STORAGE", "artifacts")))
     proxy = massive_from_environment()
-    player_clients = os.getenv("YTDLP_YOUTUBE_PLAYER_CLIENTS", "android_vr,web_embedded")
+    player_clients = os.getenv("YTDLP_YOUTUBE_PLAYER_CLIENTS", DEFAULT_PLAYER_CLIENTS)
     temporary = Path(tempfile.mkdtemp(prefix=f"video-job-{job.id}-"))
     lease_seconds = int(os.getenv("VIDEO_JOBS_LEASE_SECONDS", "120"))
     heartbeat_interval = max(1, int(os.getenv("VIDEO_JOBS_HEARTBEAT_SECONDS", "30")))
@@ -84,7 +93,7 @@ def process(job: Job) -> None:
     terminal.job_started(job.id, job.attempts, job.request.profile, job.request.delivery.type)
     route = proxy.route_for_attempt(job.id, job.attempts) if proxy else None
     exit_metadata = {}
-    if proxy and route and os.getenv("VIDEO_JOBS_CAPTURE_EXIT_METADATA", "true").lower() == "true":
+    if route and os.getenv("VIDEO_JOBS_CAPTURE_EXIT_METADATA", "true").lower() == "true":
         try:
             exit_metadata = proxy.exit_metadata(route)
         except Exception:
@@ -97,15 +106,15 @@ def process(job: Job) -> None:
             str(job.request.url), job.request.profile, temporary, route.url if route else None,
             on_output=lambda output: terminal.downloader_output(job.id, output),
         )
-        store.attempt_phase(attempt_id, "uploading", bytes_written=downloaded.path.stat().st_size)
+        size = downloaded.path.stat().st_size
+        store.attempt_phase(attempt_id, "uploading", bytes_written=size)
         store.update(job.id, JobStatus.UPLOADING)
         key = f"{job.request.delivery.key_prefix.rstrip('/')}/{downloaded.path.name}".lstrip("/")
         result = storage.put(downloaded.path, key, job.request.delivery.bucket)
-        result["video"] = {"id": downloaded.video_id, "bytes": downloaded.path.stat().st_size,
+        result["video"] = {"id": downloaded.video_id, "bytes": size,
                            "duration_s": downloaded.duration_s, "resolution": downloaded.resolution}
         finished = store.update(job.id, JobStatus.COMPLETED, result=result)
-        deliver_webhook(finished)
-        store.finish_attempt(attempt_id, "completed", bytes_written=downloaded.path.stat().st_size)
+        store.finish_attempt(attempt_id, "completed", bytes_written=size)
         terminal.completed(job.id, key)
     except Exception as exc:
         classified = classify(exc)
@@ -119,10 +128,9 @@ def process(job: Job) -> None:
         store.finish_attempt(attempt_id, "failed", classified.code)
         failed = store.update(job.id, JobStatus.FAILED, error_code=classified.code, error_message=classified.message)
         terminal.failed(job.id, classified.message)
-        try:
-            deliver_webhook(failed)
-        except Exception:
-            pass
+        notify(failed)
+    else:
+        notify(finished)
     finally:
         stopped.set()
         heartbeat.join(timeout=1)
@@ -140,7 +148,7 @@ def main() -> None:
     terminal.banner(concurrency, massive_from_environment() is not None)
     recovered = store.recover_stale()
     if recovered:
-        terminal.line(f"\033[33m  [recovered]\033[0m requeued {recovered} expired worker lease(s)")
+        terminal.recovered(recovered)
     lease_seconds = int(os.getenv("VIDEO_JOBS_LEASE_SECONDS", "120"))
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
         while True:

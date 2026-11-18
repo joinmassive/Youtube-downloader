@@ -1,18 +1,20 @@
 from __future__ import annotations
 
-import os
-import shutil
-import uuid
 import base64
 import hashlib
 import http.client
+import os
+import shutil
 import ssl
-from urllib.parse import quote, unquote, urlsplit
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Protocol
+from urllib.parse import quote, unquote, urlsplit
 
 from .errors import DownloadError, redact
+
+DEFAULT_PLAYER_CLIENTS = "android_vr,web_embedded"
 
 
 @dataclass(frozen=True)
@@ -79,7 +81,7 @@ class YtDlpDownloader:
             raise RuntimeError("Install video-jobs[youtube] to download YouTube videos") from exc
         target_dir.mkdir(parents=True, exist_ok=True)
         template = str(target_dir / "%(id)s.%(ext)s")
-        player_clients = os.getenv("YTDLP_YOUTUBE_PLAYER_CLIENTS", "android_vr,web_embedded")
+        player_clients = os.getenv("YTDLP_YOUTUBE_PLAYER_CLIENTS", DEFAULT_PLAYER_CLIENTS)
         messages: list[str] = []
 
         def record(message: object) -> None:
@@ -133,6 +135,12 @@ class YtDlpDownloader:
                                           if info.get("width") and info.get("height") else None))
 
 
+@dataclass(frozen=True)
+class ProxyRoute:
+    url: str
+    session_hash: str
+
+
 class MassiveStrictProxy:
     """Build a Massive residential proxy URL for one download attempt."""
     def __init__(self, username: str, api_key: str, host: str = "network.joinmassive.com",
@@ -141,7 +149,7 @@ class MassiveStrictProxy:
         self.username, self.api_key, self.host, self.port, self.scheme = username, api_key, host, port, scheme
         self.country, self.session_ttl = country, session_ttl
 
-    def route_for_attempt(self, job_id: str, attempt: int) -> "ProxyRoute":
+    def route_for_attempt(self, job_id: str, attempt: int) -> ProxyRoute:
         session = f"{job_id[:12]}-{attempt}-{uuid.uuid4().hex[:10]}"
         parts = [self.username, "session", session, "sessionmode", "strict"]
         if self.session_ttl:
@@ -156,7 +164,7 @@ class MassiveStrictProxy:
     def for_attempt(self, job_id: str, attempt: int) -> str:
         return self.route_for_attempt(job_id, attempt).url
 
-    def exit_metadata(self, route: "ProxyRoute", target: str = "www.youtube.com") -> dict[str, str]:
+    def exit_metadata(self, route: ProxyRoute, target: str = "www.youtube.com") -> dict[str, str]:
         """Read Massive CONNECT metadata without persisting credentials or raw headers."""
         parsed = urlsplit(route.url)
         username = unquote(parsed.username or "")
@@ -178,11 +186,6 @@ class MassiveStrictProxy:
         finally:
             connection.close()
 
-
-@dataclass(frozen=True)
-class ProxyRoute:
-    url: str
-    session_hash: str
 
 
 def massive_from_environment() -> MassiveStrictProxy | None:
